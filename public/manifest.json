@@ -1,7 +1,7 @@
 {
   "name": "MoguMogu Smack!",
   "short_name": "MoguMogu",
-  "description": "A cute whack-a-mole arcade game for quick mobile play.",
+  "description": "スマホで手軽に遊べる、かわいいモグラアーケードゲームです。",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
@@ -40,7 +40,7 @@
       "sizes": "512x512",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "MoguMogu Smack app icon"
+      "label": "MoguMogu Smack アプリアイコン"
     }
   ]
 }
