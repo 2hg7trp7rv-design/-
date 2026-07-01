@@ -110,6 +110,7 @@ export const DEFAULT_HIGH_SCORES: Record<Difficulty, number> = {
 };
 
 const DEFAULT_DIFFICULTY: Difficulty = 'normal';
+const DEFAULT_LANGUAGE: Language = 'ja';
 
 export const TIME_BONUS_COMBO_INTERVAL = 10;
 export const TIME_BONUS_SECONDS = 5;
@@ -217,13 +218,17 @@ function createScoreId(): string {
 }
 
 function getTodayLabel(): string {
-  return new Date().toLocaleDateString('en-US');
+  return new Date().toLocaleDateString('ja-JP');
 }
 
 function normalizeDifficulty(difficulty: unknown): Difficulty {
   return difficulty === 'easy' || difficulty === 'normal' || difficulty === 'hard'
     ? difficulty
     : DEFAULT_DIFFICULTY;
+}
+
+function normalizeLanguage(language: unknown): Language {
+  return language === 'en' || language === 'ja' ? language : DEFAULT_LANGUAGE;
 }
 
 function normalizeHighScores(
@@ -252,7 +257,7 @@ const initialState = {
   soundEnabled: true,
   musicEnabled: true,
   vibrationEnabled: true,
-  language: 'en' as Language,
+  language: DEFAULT_LANGUAGE,
   highScore: 0,
   highScoreByDifficulty: { ...DEFAULT_HIGH_SCORES },
   leaderboard: [] as ScoreEntry[],
@@ -456,9 +461,9 @@ export const useGameStore = create<GameState>()(
     }),
     {
       name: 'mogumogu-storage',
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => safeLocalStorage),
-      migrate: (persistedState) => {
+      migrate: (persistedState, version) => {
         if (!persistedState || typeof persistedState !== 'object') {
           return persistedState;
         }
@@ -470,7 +475,7 @@ export const useGameStore = create<GameState>()(
           totalMisses?: unknown;
         };
         const difficulty = normalizeDifficulty(state.difficulty);
-        const language: Language = state.language === 'ja' ? 'ja' : 'en';
+        const language: Language = version < 6 ? DEFAULT_LANGUAGE : normalizeLanguage(state.language);
         const legacyTotalHits = typeof state.totalHits === 'number' ? state.totalHits : 0;
         const legacyTotalMisses = typeof state.totalMisses === 'number' ? state.totalMisses : 0;
         const cumulativeGoodHits =
