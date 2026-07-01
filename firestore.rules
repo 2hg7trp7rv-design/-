@@ -1,0 +1,261 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validDifficulty(difficulty) {
+      return difficulty in ['easy', 'normal', 'hard'];
+    }
+
+    function ownerUserPath(uid) {
+      return /databases/$(database)/documents/ownerUsers/$(uid);
+    }
+
+    function isOwner() {
+      return signedIn()
+        && exists(ownerUserPath(request.auth.uid))
+        && get(ownerUserPath(request.auth.uid)).data.enabled == true;
+    }
+
+    function forbiddenNickname(nickname) {
+      return nickname.matches('.*[Gg][Oo][Oo][Gg][Ll][Ee].*')
+        || nickname.matches('.*[Ff][Ii][Rr][Ee][Bb][Aa][Ss][Ee].*')
+        || nickname.matches('.*[Aa][Dd][Mm][Ii][Nn].*')
+        || nickname.matches('.*[Aa][Dd][Mm][Ii][Nn][Ii][Ss][Tt][Rr][Aa][Tt][Oo][Rr].*')
+        || nickname.matches('.*[Mm][Oo][Dd][Ee][Rr][Aa][Tt][Oo][Rr].*')
+        || nickname.matches('.*[Ss][Tt][Aa][Ff][Ff].*')
+        || nickname.matches('.*[Oo][Ff][Ff][Ii][Cc][Ii][Aa][Ll].*')
+        || nickname.matches('.*運営.*')
+        || nickname.matches('.*公式.*')
+        || nickname.matches('.*管理者.*');
+    }
+
+    function validNicknameShape(nickname) {
+      return nickname is string
+        && nickname.size() >= 2
+        && nickname.size() <= 12
+        && !nickname.matches('.*@.*')
+        && !nickname.matches('.*https://.*')
+        && !nickname.matches('.*http://.*')
+        && !nickname.matches('.*www\\..*')
+        && !nickname.matches('.*\\.com.*')
+        && !nickname.matches('.*\\.jp.*')
+        && !nickname.matches('.*\\.net.*')
+        && !nickname.matches('.*\\.org.*')
+        && !nickname.matches('.*\\.io.*')
+        && !nickname.matches('.*\\/.*');
+    }
+
+    function validNickname(nickname) {
+      return validNicknameShape(nickname)
+        && (!forbiddenNickname(nickname) || isOwner());
+    }
+
+    function validPublicId(publicId) {
+      return publicId is string
+        && publicId.matches('^mogu_[a-z0-9]+$')
+        && publicId.size() >= 10
+        && publicId.size() <= 32;
+    }
+
+    function profileKeys() {
+      return [
+        'publicId',
+        'nickname',
+        'profileVersion',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function publicIdLockKeys() {
+      return [
+        'ownerUid',
+        'createdAt'
+      ];
+    }
+
+    function validProfileData(data) {
+      return data.keys().hasOnly(profileKeys())
+        && validPublicId(data.publicId)
+        && validNickname(data.nickname)
+        && data.profileVersion == 'profile-v1';
+    }
+
+    function validPublicIdLockData(publicId, data) {
+      return data.keys().hasOnly(publicIdLockKeys())
+        && validPublicId(publicId)
+        && data.ownerUid == request.auth.uid;
+    }
+
+    function scoreKeys() {
+      return [
+        'publicId',
+        'nickname',
+        'difficulty',
+        'score',
+        'stars',
+        'maxCombo',
+        'accuracy',
+        'goodHits',
+        'badHits',
+        'missedFriendly',
+        'totalJudged',
+        'playLevel',
+        'playVersion',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function profilePath() {
+      return /databases/$(database)/documents/profiles/$(request.auth.uid);
+    }
+
+    function publicIdLockPath(publicId) {
+      return /databases/$(database)/documents/publicIds/$(publicId);
+    }
+
+    function profileExists() {
+      return signedIn() && exists(profilePath());
+    }
+
+    function profileMatches(publicId, nickname) {
+      return profileExists()
+        && publicIdOwnerMatches(publicId)
+        && get(profilePath()).data.publicId == publicId
+        && get(profilePath()).data.nickname == nickname;
+    }
+
+    function publicIdOwnerMatches(publicId) {
+      return signedIn()
+        && validPublicId(publicId)
+        && getAfter(publicIdLockPath(publicId)).data.ownerUid == request.auth.uid;
+    }
+
+    function publicIdLockWillBelongTo(publicId, uid) {
+      return signedIn()
+        && validPublicId(publicId)
+        && getAfter(publicIdLockPath(publicId)).data.ownerUid == uid;
+    }
+
+    function validScoreData(data, publicId, difficulty) {
+      return data.keys().hasOnly(scoreKeys())
+        && data.publicId == publicId
+        && data.difficulty == difficulty
+        && validPublicId(data.publicId)
+        && validNickname(data.nickname)
+        && data.score is int
+        && data.score >= 0
+        && data.score <= 999999
+        && data.stars is int
+        && data.stars >= 0
+        && data.stars <= 3
+        && data.maxCombo is int
+        && data.maxCombo >= 0
+        && data.maxCombo <= 500
+        && data.goodHits is int
+        && data.goodHits >= 0
+        && data.goodHits <= 500
+        && data.badHits is int
+        && data.badHits >= 0
+        && data.badHits <= 250
+        && data.missedFriendly is int
+        && data.missedFriendly >= 0
+        && data.missedFriendly <= 500
+        && data.totalJudged is int
+        && data.totalJudged == data.goodHits + data.badHits + data.missedFriendly
+        && data.accuracy is int
+        && data.accuracy >= 0
+        && data.accuracy <= 100
+        && data.playLevel is int
+        && data.playLevel >= 1
+        && data.playLevel <= 10
+        && data.playVersion == 'client-v2'
+        && data.maxCombo <= data.goodHits
+        && (data.score == 0 || data.goodHits > 0)
+        && (data.score == 0 || data.score <= data.goodHits * 350);
+    }
+
+    match /profiles/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && validProfileData(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && publicIdLockWillBelongTo(request.resource.data.publicId, uid);
+
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && resource.data.publicId == request.resource.data.publicId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && validProfileData(request.resource.data)
+        && publicIdOwnerMatches(request.resource.data.publicId);
+
+      allow delete: if false;
+    }
+
+    match /ownerUsers/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    match /publicIds/{publicId} {
+      allow get: if signedIn()
+        && validPublicId(publicId)
+        && (
+          !exists(publicIdLockPath(publicId))
+          || resource.data.ownerUid == request.auth.uid
+        );
+      allow list: if false;
+
+      allow create: if signedIn()
+        && validPublicId(publicId)
+        && validPublicIdLockData(publicId, request.resource.data)
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /publicLeaderboardsV2/{difficulty}/scores/{publicId} {
+      allow get: if validDifficulty(difficulty);
+      allow list: if validDifficulty(difficulty)
+        && request.query.limit <= 100;
+
+      allow create: if signedIn()
+        && validDifficulty(difficulty)
+        && publicIdOwnerMatches(publicId)
+        && profileMatches(publicId, request.resource.data.nickname)
+        && validScoreData(request.resource.data, publicId, difficulty)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if signedIn()
+        && validDifficulty(difficulty)
+        && publicIdOwnerMatches(publicId)
+        && profileMatches(publicId, request.resource.data.nickname)
+        && resource.data.publicId == publicId
+        && request.resource.data.score >= resource.data.score
+        && request.resource.data.createdAt == resource.data.createdAt
+        && validScoreData(request.resource.data, publicId, difficulty)
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /leaderboards/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
