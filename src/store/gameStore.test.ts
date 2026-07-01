@@ -23,6 +23,10 @@ describe('gameStore scoring and lifecycle rules', () => {
     expect(state.setScreen).toBeUndefined();
   });
 
+  it('uses Japanese as the default language after clearing app data', () => {
+    expect(useGameStore.getState().language).toBe('ja');
+  });
+
   it('breaks combo without increasing misses', () => {
     useGameStore.setState({ gameStatus: 'playing', combo: 5, missedFriendly: 2 });
 
